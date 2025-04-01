@@ -1,6 +1,6 @@
 # xboard-install-script
 
-一个xboard安装脚本，适用于Debian 12，且未安装Nginx, Redis, MaridDB等服务
+一个xboard安装脚本，适用于Debian 12，且未安装Nginx, Redis, MariaDB等服务
 
 # 一键安装
 
