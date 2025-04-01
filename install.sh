@@ -8,7 +8,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 echo "更新系统..."
-apt update && apt upgrade -y
+DEBIAN_FRONTEND=noninteractive apt update -yq && DEBIAN_FRONTEND=noninteractive apt upgrade -yq
 
 echo "安装基本工具..."
 apt install -y curl wget gnupg2 ca-certificates apt-transport-https software-properties-common lsb-release sudo git
@@ -84,18 +84,18 @@ update-alternatives --set php-config /usr/bin/php-config8.4
 
 # 安装 event 扩展
 echo "安装 event 扩展..."
-apt install -y libevent-dev libssl-dev zlib1g-dev gcc g++ make autoconf pkg-config libc6-dev
-if ! pecl install event; then
-    echo "event 扩展安装失败，请检查日志或尝试手动安装"
-    exit 1
-fi
+DEBIAN_FRONTEND=noninteractive apt install -yq libevent-dev libssl-dev zlib1g-dev gcc g++ make autoconf pkg-config libc6-dev
+echo "" | pecl install event || { echo "event 扩展安装失败"; exit 1; }
 
 # 配置扩展加载顺序，确保 sockets 在 event 之前
-echo "配置 PHP 扩展加载顺序..."
-echo "extension=sockets.so" > /etc/php/8.4/mods-available/sockets.ini
-ln -sf /etc/php/8.4/mods-available/sockets.ini /etc/php/8.4/cli/conf.d/10-sockets.ini
-echo "extension=event.so" > /etc/php/8.4/mods-available/event.ini
-ln -sf /etc/php/8.4/mods-available/event.ini /etc/php/8.4/cli/conf.d/20-event.ini
+PHP_MODS_DIR="/etc/php/8.4/mods-available"
+PHP_CLI_CONF_DIR="/etc/php/8.4/cli/conf.d"
+
+echo "extension=sockets.so" > "$PHP_MODS_DIR/sockets.ini"
+echo "extension=event.so" > "$PHP_MODS_DIR/event.ini"
+
+ln -sf "$PHP_MODS_DIR/sockets.ini" "$PHP_CLI_CONF_DIR/10-sockets.ini"
+ln -sf "$PHP_MODS_DIR/event.ini" "$PHP_CLI_CONF_DIR/20-event.ini"
 
 # 启用 PHP 相关函数
 echo "启用 PHP 相关函数..."
@@ -146,7 +146,7 @@ cat <<EOF > /etc/supervisor/conf.d/octane.conf
 [program:octane]
 user=www-data
 directory=/www/xboard
-command=/www/server/php/84/bin/php artisan octane:start --port=7010
+command=/www/server/php/8.4/bin/php artisan octane:start --port=7010
 numprocs=1
 autostart=true
 autorestart=true
