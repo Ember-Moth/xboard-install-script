@@ -70,7 +70,11 @@ apt update
 
 # 安装 PHP 8.4 及其扩展
 echo "安装 PHP 8.4 及其扩展..."
-apt install -y php8.4-cli php8.4-mysql php8.4-redis php8.4-fileinfo php8.4-readline php8.4-swoole php8.4-dev php8.4-xml php8.4-pcntl php-pear php8.4-sockets
+apt install -y php8.4-cli php8.4-mysql php8.4-redis php8.4-swoole php8.4-dev php8.4-xml php-pear
+if [ $? -ne 0 ]; then
+    echo "PHP 8.4 扩展安装失败，请检查软件源或网络连接"
+    exit 1
+fi
 
 # 设置 PHP 8.4 为默认版本
 echo "设置 PHP 8.4 为默认版本..."
@@ -98,6 +102,69 @@ echo "启用 PHP 相关函数..."
 PHP_INI="/etc/php/8.4/cli/php.ini"
 sed -i '/disable_functions/d' "$PHP_INI"
 echo "disable_functions =" >> "$PHP_INI"
+
+# 创建并进入 /www/xboard 目录，克隆 Xboard 项目
+echo "创建网站目录并克隆 Xboard 项目..."
+mkdir -p /www/xboard
+cd /www/xboard
+git clone https://github.com/cedar2025/Xboard.git ./
+
+# 设置网站目录权限
+echo "设置网站目录权限..."
+chmod -R 755 /www/xboard/*
+chown -R www-data:www-data /www/xboard/*
+
+# 执行 Xboard 初始化步骤
+echo "执行 Xboard 初始化步骤..."
+rm -rf /www/xboard/composer.phar
+wget https://github.com/composer/composer/releases/latest/download/composer.phar -O /www/xboard/composer.phar
+php /www/xboard/composer.phar install -vvv
+echo "即将运行 Xboard 安装命令，请根据提示输入必要信息（数据库信息可用之前输入的 $dbname, $dbuser, $dbpass）..."
+php artisan xboard:install
+
+# 安装 Supervisor
+echo "安装 Supervisor..."
+apt install -y supervisor
+
+# 配置 Supervisor - Xboard Horizon 队列进程
+echo "配置 Supervisor - Xboard Horizon 队列进程..."
+cat <<EOF > /etc/supervisor/conf.d/xboard.conf
+[program:xboard]
+user=www-data
+directory=/www/xboard
+command=php artisan horizon
+numprocs=1
+autostart=true
+autorestart=true
+stopasgroup=true
+killasgroup=true
+EOF
+
+# 配置 Supervisor - Octane 服务进程
+echo "配置 Supervisor - Octane 服务进程..."
+cat <<EOF > /etc/supervisor/conf.d/octane.conf
+[program:octane]
+user=www-data
+directory=/www/xboard
+command=/www/server/php/84/bin/php artisan octane:start --port=7010
+numprocs=1
+autostart=true
+autorestart=true
+stopasgroup=true
+killasgroup=true
+EOF
+
+# 配置定时任务
+echo "配置定时任务 - v2board..."
+echo "* * * * * www-data php /www/xboard/artisan schedule:run >> /dev/null 2>&1" > /etc/cron.d/v2board
+
+# 启动 Supervisor 并更新配置
+echo "启动 Supervisor 并加载配置..."
+systemctl enable supervisor
+systemctl start supervisor
+supervisorctl reread
+supervisorctl update
+supervisorctl start all
 
 # 检查安装情况
 echo "安装完成，版本信息如下："
